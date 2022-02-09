@@ -49,15 +49,15 @@ pipeline {
                 sh 'terraform apply --auto-approve'
                 script {
                     echo 'Waiting for Leader Manager'
-​
+
                     id = sh(script: 'aws ec2 describe-instances --filters Name=tag-value,Values=davids-docker-grand-master Name=instance-state-name,Values=running --query Reservations[*].Instances[*].[InstanceId] --output text',  returnStdout:true).trim()
-​
+
                     echo '$id'
-​
+
                     sh 'aws ec2 wait instance-status-ok --instance-ids $id'
-​
+
                     echo 'Leader manager is running'
-​
+
                     mid = sh(script: 'aws ec2 describe-instances --filters Name=tag-value,Values=dsvids-docker-manager-2 Name=instance-state-name,Values=running --query Reservations[*].Instances[*].[InstanceId] --output text',  returnStdout:true).trim()
                     sh 'aws ec2 wait instance-status-ok --instance-ids $mid'
                     
@@ -68,14 +68,14 @@ pipeline {
                 }
             }
         }
-​
+
         stage('Test the Infrastructure') {
-​
+
              steps {
                  echo "Testing if the Docker Swarm is ready or not, by checking Viz App on Grand Master with Public Ip Address: ${MASTER_INSTANCE_PUBLIC_IP}:8080"
                  script {
                  while(true) {
-​
+
                  try {
                     sh "curl -s --connect-timeout 60 ${MASTER_INSTANCE_PUBLIC_IP}:8080"
                     echo "Successfully connected to Viz App."
@@ -89,27 +89,27 @@ pipeline {
                  }
              }
          }
-​
+
         stage('Deploy App on Docker Swarm'){
             environment {
                 MASTER_INSTANCE_ID=sh(script:'aws ec2 describe-instances --region ${AWS_REGION} --filters Name=tag-value,Values=davids-docker-grand-master Name=instance-state-name,Values=running --query Reservations[*].Instances[*].[InstanceId] --output text', returnStdout:true).trim()
             }
             steps {
-​
+
                 echo "Cloning and Deploying App on Swarm using Grand Master with Instance Id: $MASTER_INSTANCE_ID"
                 sh 'mssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no --region ${AWS_REGION} ${MASTER_INSTANCE_ID} git clone ${GIT_URL}'
                 sleep(20)
                 sh 'mssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no --region ${AWS_REGION} ${MASTER_INSTANCE_ID} docker stack deploy --with-registry-auth -c ${HOME_FOLDER}/${GIT_FOLDER}/docker-compose.yml ${APP_NAME}'
             }
         }
-​
+
     }
     post {
         always {
             echo 'Deleting all local images'
             sh 'docker image prune -af'
         }
-​
+
         success{
                 timeout(time:5, unit:'DAYS'){
                     input message:'Destroy the infrastructure?'
@@ -123,9 +123,9 @@ pipeline {
                   --force
                 """
         }
-​
+
         failure {
-​
+
             echo 'Delete the Image Repository on ECR due to the Failure'
             sh """
                 aws ecr delete-repository \
@@ -138,4 +138,3 @@ pipeline {
         }
     }
 }
-​
